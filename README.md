@@ -41,6 +41,18 @@ Built with Swift and SwiftUI, with [Claude Code](https://claude.com/claude-code)
 - When Claude needs permission it drops down, glows amber, and shows **Allow / Always / Deny**.
 - Bounces with a ✓ when a task is done and lists every file changed (click to open in VS Code).
 
+<p align="center">
+  <img src="docs/images/07-deadlines.png" width="45%">
+  <img src="docs/images/08-due-today.png" width="45%">
+</p>
+
+**Deadline reminders**
+- A **Due soon** tile lists what's coming up, colour-coded: today, tomorrow, later.
+- The day before something is due, Dangle drops down with a **Due tomorrow** card at 9 AM.
+- On the due day it comes back **every 2 hours** with a countdown until you mark it complete.
+- Optional phone reminders with a **Mark complete** button, through the free [ntfy](https://ntfy.sh) app (Android or iPhone) or a Claude scheduled task. Marking it done anywhere stops the reminders everywhere.
+- Deadlines live in `~/Library/Application Support/Hangtime/deadlines.json`, outside the code, so your courses stay private. Hangtime reloads the file when it changes.
+
 ## How the Claude Code connection works
 
 Hangtime adds [hooks](https://code.claude.com/docs/en/hooks) to `~/.claude/settings.json` (a backup is kept). Claude Code runs `~/.hangtime/hook.sh` at key moments; the script passes the event to Hangtime over `127.0.0.1` only, protected by a random token. If Hangtime isn't running, the script does nothing and Claude Code behaves exactly as normal. You can disconnect any time from the Dangle menu.
@@ -67,6 +79,7 @@ It compiles the app into `~/Applications/Hangtime.app` and starts it. Move the m
 | `Sources/ClaudeCode.swift` | Claude Code bridge: hooks, local server, sessions, files changed, token usage |
 | `Sources/Dangle.swift` | The Dangle character and its moods |
 | `Sources/Notices.swift` | Notch pop-ups: activity pill, permission requests, alerts |
+| `Sources/Deadlines.swift` | Deadline reminders, Due soon tile, phone push |
 | `Sources/MiniWindow.swift` | Mini Claude / Gemini window |
 | `promo/` | Renders the showcase images (`--images`) and a promo reel |
 

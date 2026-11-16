@@ -8,7 +8,7 @@ import Combine
 enum WidgetKind: String, CaseIterable, Identifiable {
     case files, tools, system, music, links
     case claude, tokens, ask
-    case projects, github
+    case due, projects, github
 
     var id: String { rawValue }
 
@@ -24,6 +24,7 @@ enum WidgetKind: String, CaseIterable, Identifiable {
         case .ask: return "Ask AI"
         case .projects: return "Projects"
         case .github: return "GitHub activity"
+        case .due: return "Due soon (course deadlines)"
         }
     }
 }
@@ -37,7 +38,7 @@ struct DockPage: Identifiable {
     static let all: [DockPage] = [
         DockPage(id: 0, name: "Mac", symbol: "laptopcomputer", kinds: [.files, .tools, .system, .music]),
         DockPage(id: 1, name: "Claude", symbol: "sparkle", kinds: [.claude, .tokens, .ask]),
-        DockPage(id: 2, name: "Code", symbol: "chevron.left.forwardslash.chevron.right", kinds: [.projects, .links, .github])
+        DockPage(id: 2, name: "Code", symbol: "chevron.left.forwardslash.chevron.right", kinds: [.due, .projects, .links, .github])
     ]
 }
 
@@ -122,6 +123,11 @@ final class Store: ObservableObject {
         if !d.bool(forKey: "added.links") {          // new widget: switch it on once
             if !list.contains(WidgetKind.links.rawValue) { list.append(WidgetKind.links.rawValue) }
             d.set(true, forKey: "added.links")
+            d.set(list, forKey: "enabled6")
+        }
+        if !d.bool(forKey: "added.due") {            // deadline reminders: switch the tile on once
+            if !list.contains(WidgetKind.due.rawValue) { list.append(WidgetKind.due.rawValue) }
+            d.set(true, forKey: "added.due")
             d.set(list, forKey: "enabled6")
         }
         if !d.bool(forKey: "added.github") {         // GitHub activity came back: switch it on once

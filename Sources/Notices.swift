@@ -63,6 +63,10 @@ final class NoticeCenter: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.layoutSoon() }
             .store(in: &bag)
+        Deadlines.shared.$showing
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in self?.layoutSoon() }
+            .store(in: &bag)
         Store.shared.$showActivity
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in self?.layoutSoon() }
@@ -106,7 +110,7 @@ final class NoticeCenter: ObservableObject {
         guard let panel = panel, let hosting = hosting, let screen = NSScreen.screens.first else { return }
         let hang = barBottom == nil && Store.shared.showActivity
         if hanging != hang { hanging = hang }
-        let empty = ClaudeCode.shared.requests.isEmpty && alerts.isEmpty && !NoticeCenter.showsActivity
+        let empty = ClaudeCode.shared.requests.isEmpty && alerts.isEmpty && !NoticeCenter.showsActivity && Deadlines.shared.showing == nil
         if empty {
             if panel.isVisible {
                 NSAnimationContext.runAnimationGroup({ context in
@@ -138,6 +142,7 @@ final class NoticeCenter: ObservableObject {
 struct NoticeStack: View {
     @ObservedObject private var code = ClaudeCode.shared
     @ObservedObject private var center = NoticeCenter.shared
+    @ObservedObject private var deadlines = Deadlines.shared
 
     var body: some View {
         VStack(spacing: 8) {
@@ -152,6 +157,9 @@ struct NoticeStack: View {
             }
             ForEach(code.requests) { request in
                 PermissionCard(request: request)
+            }
+            if let reminder = deadlines.showing {
+                DueCard(reminder: reminder)
             }
             ForEach(center.alerts) { alert in
                 AlertCard(alert: alert)
@@ -168,6 +176,7 @@ struct NoticeStack: View {
 extension NoticeStack {
     var mood: DangleMood {
         if !code.requests.isEmpty { return .waiting }
+        if let reminder = deadlines.showing { return reminder.kind == .today ? .error : .waiting }
         if !center.alerts.isEmpty { return .waiting }
         if let session = NoticeCenter.activeSession { return session.state == .error ? .error : .working }
         if code.finished != nil { return .done }

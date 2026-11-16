@@ -351,6 +351,7 @@ struct WidgetView: View {
         case .system: SystemWidget()
         case .music: MusicWidget()
         case .links: LinksWidget()
+        case .due: DueWidget()
         case .claude: ClaudeWidget()
         case .tokens: TokensWidget()
         case .ask: AskAIWidget()

@@ -14,6 +14,7 @@
     <key>CFBundleVersion</key><string>3</string>
     <key>LSMinimumSystemVersion</key><string>13.0</string>
     <key>LSUIElement</key><true/>
+    <key>NSAppSleepDisabled</key><true/>
     <key>NSHighResolutionCapable</key><true/>
     <key>NSAppleEventsUsageDescription</key><string>Hangtime shows and controls the song playing in Spotify, Music or YouTube Music, and toggles dark mode.</string>
     <key>NSDownloadsFolderUsageDescription</key><string>Hangtime shows your newest downloads in the Files widget.</string>

@@ -92,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.hosting = hosting
 
         NoticeCenter.shared.start()
+        Deadlines.shared.start()
         SystemStats.shared.start()
         NowPlaying.shared.start()
         ClipboardWatcher.shared.start()

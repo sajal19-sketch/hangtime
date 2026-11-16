@@ -47,6 +47,20 @@ enum Snapshot {
         .background(LinearGradient(colors: [Color(red: 0.12, green: 0.31, blue: 0.54), Color(red: 0.42, green: 0.23, blue: 0.61)],
                                    startPoint: .leading, endPoint: .trailing))
         .environment(\.colorScheme, .dark)
+        let dueView = VStack(spacing: 14) {
+            DueCard(reminder: Deadlines.Reminder(kind: .tomorrow, itemIDs: ["aqa-asg", "sms9"])).frame(width: 380)
+            DueCard(reminder: Deadlines.Reminder(kind: .today, itemIDs: ["aqa-asg"])).frame(width: 380)
+            HStack { DueWidget() }
+        }
+        .padding(18)
+        .background(Color(red: 0.2, green: 0.2, blue: 0.35))
+        .environment(\.colorScheme, .dark)
+        let dueRenderer = ImageRenderer(content: dueView)
+        dueRenderer.scale = 2
+        if let image = dueRenderer.nsImage, let tiff = image.tiffRepresentation,
+           let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:]) {
+            try? png.write(to: folder.appendingPathComponent("due.png"))
+        }
         let renderer = ImageRenderer(content: moods)
         renderer.scale = 2
         if let image = renderer.nsImage, let tiff = image.tiffRepresentation,

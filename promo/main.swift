@@ -623,6 +623,106 @@ func barView<P: View>(_ page: P, index: Int) -> some View {
         .padding(8).background(Glass()).fixedSize()
 }
 
+// MARK: - Deadline reminder showcase pieces (sample courses only)
+
+struct PromoDueRow: View {
+    let course: String; let title: String; let when: String; var hot = false
+    var body: some View {
+        HStack(spacing: 14) {
+            RoundedRectangle(cornerRadius: 3).fill(accent).frame(width: 7)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title).font(.system(size: 30, weight: .semibold))
+                Text("\(course) · \(when)").font(.system(size: 24)).foregroundColor(.white.opacity(0.65))
+            }
+            Spacer()
+            Image(systemName: "checkmark").font(.system(size: 22, weight: .heavy))
+                .frame(width: 50, height: 50).background(Circle().fill(green))
+        }
+        .padding(16)
+        .background(RoundedRectangle(cornerRadius: 18).fill((hot ? Color.red : Color.white).opacity(hot ? 0.16 : 0.08)))
+    }
+}
+
+struct PromoDueCard: View {
+    let today: Bool
+    var body: some View {
+        let red = Color(red: 1, green: 0.42, blue: 0.43)
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(spacing: 12) {
+                Image(systemName: today ? "alarm.fill" : "calendar.badge.clock").font(.system(size: 32)).foregroundColor(today ? red : amber)
+                Text(today ? "Due today" : "Due tomorrow").font(.system(size: 36, weight: .bold))
+                Spacer()
+                Text(today ? "14h 59m left" : "from your planner").font(.system(size: today ? 30 : 24, weight: today ? .bold : .regular))
+                    .foregroundColor(today ? red : .white.opacity(0.6))
+            }
+            if today {
+                PromoDueRow(course: "COSC 2307", title: "Assignment 3: Linked lists", when: "today 11:59 PM", hot: true)
+                Text("Next reminder in 2 hours · also on your phone").font(.system(size: 22)).foregroundColor(.white.opacity(0.6))
+            } else {
+                PromoDueRow(course: "COSC 2307", title: "Assignment 3: Linked lists", when: "Thu 11:59 PM")
+                PromoDueRow(course: "BIOL 1006", title: "Lab report 5", when: "Thu 5:00 PM")
+            }
+            HStack(spacing: 14) {
+                Spacer()
+                Text(today ? "Snooze 1h" : "Remind me later").font(.system(size: 24, weight: .semibold)).padding(.horizontal, 22).padding(.vertical, 11).background(Capsule().fill(Color.white.opacity(0.14)))
+                Text(today ? "Mark complete" : "Mark all done").font(.system(size: 24, weight: .semibold)).padding(.horizontal, 22).padding(.vertical, 11)
+                    .background(Capsule().fill(today ? green : accent))
+            }
+        }
+        .padding(28).frame(width: 920)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(Glass(radius: 36))
+        .overlay(RoundedRectangle(cornerRadius: 36, style: .continuous).strokeBorder(today ? red.opacity(0.6) : .clear, lineWidth: 2))
+    }
+}
+
+struct PromoDueTile: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack { Text("DUE SOON").font(.system(size: 18, weight: .heavy)).foregroundColor(.white.opacity(0.55)); Spacer(); Text("3 this week").font(.system(size: 18)).foregroundColor(.white.opacity(0.55)) }
+            row(Color(red: 1, green: 0.42, blue: 0.43), "Assignment 3", "today")
+            row(Color(red: 1, green: 0.8, blue: 0.3), "Lab report 5", "tomorrow")
+            row(Color(red: 0.45, green: 0.88, blue: 0.58), "Midterm 1 study", "Mon")
+        }
+        .padding(22).frame(width: 520)
+        .fixedSize(horizontal: false, vertical: true)
+        .background(Glass(radius: 30))
+    }
+    func row(_ c: Color, _ t: String, _ w: String) -> some View {
+        HStack(spacing: 12) { Circle().fill(c).frame(width: 14, height: 14); Text(t).font(.system(size: 26, weight: .semibold)); Spacer(); Text(w).font(.system(size: 22, weight: .semibold)).foregroundColor(c) }
+    }
+}
+
+struct PromoPhone: View {
+    var body: some View {
+        VStack(spacing: 14) {
+            Capsule().fill(Color.black).frame(width: 18, height: 18).padding(.top, 14)
+            Text("11:00").font(.system(size: 72, weight: .semibold))
+            Text("Thursday, December 3").font(.system(size: 22)).foregroundColor(.white.opacity(0.7)).padding(.bottom, 10)
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 10) {
+                    RoundedRectangle(cornerRadius: 7).fill(clay).frame(width: 30, height: 30)
+                        .overlay(Image(systemName: "sparkle").font(.system(size: 16, weight: .bold)))
+                    Text("Claude").font(.system(size: 22, weight: .semibold)); Spacer(); Text("now").font(.system(size: 18)).foregroundColor(.white.opacity(0.6))
+                }
+                Text("⏰ Due today 11:59 PM: COSC 2307 Assignment 3 (12h left). Reply done to tick it off.").font(.system(size: 21)).fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(18).background(RoundedRectangle(cornerRadius: 24).fill(Color.white.opacity(0.14)))
+            HStack { Spacer(); Text("done ✅").font(.system(size: 22, weight: .semibold)).padding(.horizontal, 20).padding(.vertical, 12).background(RoundedRectangle(cornerRadius: 20).fill(accent)) }
+            HStack {
+                Text("Marked complete. Reminders stopped on your phone and in Hangtime.").font(.system(size: 20)).padding(16)
+                    .background(RoundedRectangle(cornerRadius: 20).fill(Color.white.opacity(0.12))).fixedSize(horizontal: false, vertical: true)
+                Spacer()
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 22)
+        .frame(width: 420, height: 820)
+        .background(RoundedRectangle(cornerRadius: 56, style: .continuous).fill(Color(red: 0.05, green: 0.05, blue: 0.08)))
+        .overlay(RoundedRectangle(cornerRadius: 56, style: .continuous).strokeBorder(Color(white: 0.25), lineWidth: 6))
+    }
+}
+
 @MainActor func renderImages(to folder: URL) {
     try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     func save<V: View>(_ name: String, _ view: V) {
@@ -690,6 +790,25 @@ func barView<P: View>(_ page: P, index: Int) -> some View {
             g.permissionCard.padding(.top, 24)
         }
         .padding(.top, 58)
+    })
+    save("07-deadlines.png", Card(title: "Never miss a deadline", subtitle: "Dangle drops down the day before anything is due in my course planner") {
+        VStack(spacing: 0) {
+            Rectangle().fill(Color.white.opacity(0.5)).frame(width: 4, height: 30)
+            Dangle(size: 120, glow: amber, glowAmount: 1)
+            PromoDueCard(today: false).padding(.top, 20)
+            PromoDueTile().padding(.top, 34)
+        }
+        .padding(.top, 58)
+    })
+    save("08-due-today.png", Card(title: "Reminded until it's done", subtitle: "Every 2 hours on the due day, on my Mac and my phone. Tick it off anywhere and it stops everywhere.") {
+        HStack(alignment: .top, spacing: 30) {
+            VStack(spacing: 0) {
+                Dangle(size: 110, glow: .red, glowAmount: 1)
+                PromoDueCard(today: true).scaleEffect(0.62).frame(width: 580, height: 330)
+            }
+            PromoPhone().scaleEffect(0.86).frame(width: 362, height: 705)
+        }
+        .padding(.top, 70)
     })
     save("banner.png", Card(width: 1600, height: 800, title: "Hangtime", subtitle: "A glassy notch bar for macOS · with Dangle, a Claude Code companion") {
         HStack(alignment: .top, spacing: 60) {
