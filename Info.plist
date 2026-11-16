@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key><string>Hangtime</string>
+    <key>CFBundleDisplayName</key><string>Hangtime</string>
+    <!-- The app was renamed MyDock -> Deckhand -> Hangtime. The identifier stays
+         local.deckhand.app so your saved settings and sign-ins carry over. -->
+    <key>CFBundleIdentifier</key><string>local.deckhand.app</string>
+    <key>CFBundleExecutable</key><string>Hangtime</string>
+    <key>CFBundlePackageType</key><string>APPL</string>
+    <key>CFBundleIconFile</key><string>AppIcon</string>
+    <key>CFBundleShortVersionString</key><string>3.0</string>
+    <key>CFBundleVersion</key><string>3</string>
+    <key>LSMinimumSystemVersion</key><string>13.0</string>
+    <key>LSUIElement</key><true/>
+    <key>NSHighResolutionCapable</key><true/>
+    <key>NSAppleEventsUsageDescription</key><string>Hangtime shows and controls the song playing in Spotify, Music or YouTube Music, and toggles dark mode.</string>
+    <key>NSDownloadsFolderUsageDescription</key><string>Hangtime shows your newest downloads in the Files widget.</string>
+    <key>NSDocumentsFolderUsageDescription</key><string>Hangtime finds your projects, Tailored Resumes and pinned folders in Documents.</string>
+    <key>NSDesktopFolderUsageDescription</key><string>Hangtime finds projects and pinned folders on your Desktop.</string>
+    <key>NSMicrophoneUsageDescription</key><string>Hangtime lets you speak your question to Claude or Gemini.</string>
+</dict>
+</plist>

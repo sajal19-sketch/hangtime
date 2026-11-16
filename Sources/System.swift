@@ -1,0 +1,404 @@
+import Foundation
+import AppKit
+import Combine
+import Darwin
+import IOKit.ps
+import Carbon.HIToolbox
+import UniformTypeIdentifiers
+
+// MARK: - System stats (CPU, memory, battery)
+
+final class SystemStats: ObservableObject {
+    static let shared = SystemStats()
+
+    @Published var history: [Double] = Array(repeating: 0, count: 40)   // recent CPU samples
+    @Published var cpu: Double = 0        // 0...1
+    @Published var memory: Double = 0     // 0...1
+    @Published var battery: Int? = nil    // percent, nil on desktops
+    @Published var charging = false
+
+    private var timer: Timer?
+    private var lastUsed: Double = 0
+    private var lastTotal: Double = 0
+
+    func start() {
+        update()
+        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+            self?.update()
+        }
+    }
+
+    private func update() {
+        if let ticks = cpuTicks() {
+            let dUsed = ticks.used - lastUsed
+            let dTotal = ticks.total - lastTotal
+            if lastTotal > 0, dTotal > 0 {
+                cpu = max(0, min(1, dUsed / dTotal))
+                var samples = history
+                samples.removeFirst()
+                samples.append(cpu)
+                history = samples
+            }
+            lastUsed = ticks.used
+            lastTotal = ticks.total
+        }
+        if let mem = memoryUsage() {
+            memory = mem
+        }
+        readBattery()
+    }
+
+    private func cpuTicks() -> (used: Double, total: Double)? {
+        var info = host_cpu_load_info_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<host_cpu_load_info_data_t>.stride / MemoryLayout<integer_t>.stride
+        )
+        let result = withUnsafeMutablePointer(to: &info) { pointer -> kern_return_t in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rebound in
+                host_statistics(mach_host_self(), HOST_CPU_LOAD_INFO, rebound, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { return nil }
+        let user = Double(info.cpu_ticks.0)
+        let system = Double(info.cpu_ticks.1)
+        let idle = Double(info.cpu_ticks.2)
+        let nice = Double(info.cpu_ticks.3)
+        return (user + system + nice, user + system + nice + idle)
+    }
+
+    private func memoryUsage() -> Double? {
+        var info = vm_statistics64_data_t()
+        var count = mach_msg_type_number_t(
+            MemoryLayout<vm_statistics64_data_t>.stride / MemoryLayout<integer_t>.stride
+        )
+        let result = withUnsafeMutablePointer(to: &info) { pointer -> kern_return_t in
+            pointer.withMemoryRebound(to: integer_t.self, capacity: Int(count)) { rebound in
+                host_statistics64(mach_host_self(), HOST_VM_INFO64, rebound, &count)
+            }
+        }
+        guard result == KERN_SUCCESS else { return nil }
+        let pageSize = Double(sysconf(_SC_PAGESIZE))
+        let usedPages = Double(info.active_count) + Double(info.wire_count) + Double(info.compressor_page_count)
+        let total = Double(ProcessInfo.processInfo.physicalMemory)
+        guard total > 0 else { return nil }
+        return max(0, min(1, usedPages * pageSize / total))
+    }
+
+    private func readBattery() {
+        guard let blob = IOPSCopyPowerSourcesInfo()?.takeRetainedValue(),
+              let list = IOPSCopyPowerSourcesList(blob)?.takeRetainedValue() as? [CFTypeRef] else {
+            battery = nil
+            return
+        }
+        for source in list {
+            guard let info = IOPSGetPowerSourceDescription(blob, source)?.takeUnretainedValue() as? [String: Any],
+                  let capacity = info[kIOPSCurrentCapacityKey as String] as? Int else { continue }
+            let maxCapacity = (info[kIOPSMaxCapacityKey as String] as? Int) ?? 100
+            battery = maxCapacity > 0 ? Int((Double(capacity) / Double(maxCapacity) * 100).rounded()) : capacity
+            charging = (info[kIOPSIsChargingKey as String] as? Bool) ?? false
+            return
+        }
+        battery = nil
+    }
+}
+
+// MARK: - Clipboard history
+
+final class ClipboardWatcher: ObservableObject {
+    static let shared = ClipboardWatcher()
+
+    @Published var items: [String] = []
+
+    private var timer: Timer?
+    private var lastChange = NSPasteboard.general.changeCount
+
+    func start() {
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            self?.check()
+        }
+    }
+
+    private func check() {
+        let board = NSPasteboard.general
+        guard board.changeCount != lastChange else { return }
+        lastChange = board.changeCount
+        // Password managers mark secrets as concealed or transient: never keep those.
+        let types = Set((board.types ?? []).map { $0.rawValue })
+        let secret = ["org.nspasteboard.ConcealedType", "org.nspasteboard.TransientType",
+                      "org.nspasteboard.AutoGeneratedType", "com.agilebits.onepassword"]
+        if secret.contains(where: types.contains) { return }
+        guard let text = board.string(forType: .string) else { return }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        items.removeAll { $0 == text }
+        items.insert(text, at: 0)
+        if items.count > 15 {
+            items.removeLast(items.count - 15)
+        }
+    }
+
+    func copy(_ text: String) {
+        let board = NSPasteboard.general
+        board.clearContents()
+        board.setString(text, forType: .string)
+    }
+}
+
+// MARK: - Quick actions
+
+enum QuickActions {
+    private static var sampler: NSColorSampler?
+
+    static func screenshot() {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        task.arguments = ["-i", "-c"]   // drag to select; result goes to the clipboard
+        try? task.run()
+    }
+
+    static func sleepDisplay() {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/pmset")
+        task.arguments = ["displaysleepnow"]
+        try? task.run()
+    }
+
+    static func toggleDarkMode() {
+        let source = "tell application \"System Events\" to tell appearance preferences to set dark mode to not dark mode"
+        DispatchQueue.global(qos: .userInitiated).async {
+            AppleScript.run(source)
+        }
+    }
+
+    static func openDownloads() {
+        if let url = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    /// Pick any colour on screen; its hex code is copied to the clipboard.
+    static func pickColor() {
+        let picker = NSColorSampler()
+        sampler = picker
+        picker.show { color in
+            sampler = nil
+            guard let rgb = color?.usingColorSpace(.sRGB) else { return }
+            let hex = String(
+                format: "#%02X%02X%02X",
+                Int((rgb.redComponent * 255).rounded()),
+                Int((rgb.greenComponent * 255).rounded()),
+                Int((rgb.blueComponent * 255).rounded())
+            )
+            ClipboardWatcher.shared.copy(hex)
+        }
+    }
+
+    static func search(_ query: String) {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var components = URLComponents(string: "https://www.google.com/search")!
+        components.queryItems = [URLQueryItem(name: "q", value: trimmed)]
+        if let url = components.url {
+            NSWorkspace.shared.open(url)
+        }
+    }
+}
+
+// MARK: - Volume
+
+final class VolumeControl: ObservableObject {
+    static let shared = VolumeControl()
+
+    @Published var level: Double = 50     // 0...100
+
+    private let queue = DispatchQueue(label: "hangtime.volume")
+    private var latest = -1
+
+    func start() {
+        refresh()
+    }
+
+    func refresh() {
+        queue.async { [weak self] in
+            guard let text = AppleScript.run("output volume of (get volume settings)"), let value = Int(text) else { return }
+            DispatchQueue.main.async {
+                self?.level = Double(value)
+            }
+        }
+    }
+
+    func set(_ value: Double) {
+        let target = Int(max(0, min(100, value)).rounded())
+        level = Double(target)
+        latest = target
+        queue.async { [weak self] in
+            guard let self = self, self.latest == target else { return }   // skip stale drags
+            AppleScript.run("set volume output volume \(target)")
+        }
+    }
+}
+
+extension QuickActions {
+    /// Opens (or brings forward) an app by its bundle identifier.
+    static func openApp(_ bundleID: String) {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else { return }
+        NSWorkspace.shared.openApplication(at: url, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
+    }
+
+    /// Opens files or folders with a specific app (VS Code, Terminal...). Falls back to the default app.
+    static func open(_ urls: [URL], withApp bundleID: String) {
+        guard let app = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            urls.forEach { NSWorkspace.shared.open($0) }
+            return
+        }
+        NSWorkspace.shared.open(urls, withApplicationAt: app, configuration: NSWorkspace.OpenConfiguration(), completionHandler: nil)
+    }
+
+    static func appInstalled(_ bundleID: String) -> Bool {
+        NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) != nil
+    }
+}
+
+// MARK: - Command-line tools (gh, claude...)
+
+enum Shell {
+    static let searchPath = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin", "/bin", "/usr/sbin", "/sbin",
+                             NSHomeDirectory() + "/.local/bin"]
+
+    static func find(_ name: String) -> String? {
+        searchPath.map { $0 + "/" + name }.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    /// Runs a program and returns its exit status and combined output. Call off the main thread.
+    @discardableResult
+    static func run(_ executable: String, _ arguments: [String], in folder: String? = nil) -> (status: Int32, output: String) {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: executable)
+        task.arguments = arguments
+        if let folder = folder { task.currentDirectoryURL = URL(fileURLWithPath: folder) }
+        var env = ProcessInfo.processInfo.environment
+        env["PATH"] = searchPath.joined(separator: ":")
+        task.environment = env
+        let pipe = Pipe()
+        task.standardOutput = pipe
+        task.standardError = pipe
+        do { try task.run() } catch { return (-1, error.localizedDescription) }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+        return (task.terminationStatus, String(decoding: data, as: UTF8.self))
+    }
+}
+
+// MARK: - Launch at login (a LaunchAgent in ~/Library/LaunchAgents)
+
+enum LoginItem {
+    static var plistURL: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/LaunchAgents/local.hangtime.app.plist")
+    }
+
+    /// Stops the old MyDock and Deckhand versions from opening at login (both became Hangtime).
+    static func removeLegacy() {
+        for name in ["local.mydock.app.plist", "local.deckhand.app.plist"] {
+            let old = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Library/LaunchAgents/" + name)
+            if FileManager.default.fileExists(atPath: old.path) {
+                try? FileManager.default.removeItem(at: old)
+                debugLog("removed old login item \(name)")
+            }
+        }
+    }
+
+    static func set(_ on: Bool) {
+        if on {
+            let dict: [String: Any] = [
+                "Label": "local.hangtime.app",
+                "ProgramArguments": ["/usr/bin/open", "-a", Bundle.main.bundlePath],
+                "RunAtLoad": true
+            ]
+            try? FileManager.default.createDirectory(at: plistURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+            _ = (dict as NSDictionary).write(to: plistURL, atomically: true)
+        } else {
+            try? FileManager.default.removeItem(at: plistURL)
+        }
+    }
+}
+
+// MARK: - Global keyboard shortcuts
+
+enum HotKey {
+    static var handlers: [UInt32: () -> Void] = [:]
+    private static var references: [EventHotKeyRef?] = []
+    private static var installed = false
+
+    /// Control + Option + Space = keep the bar open. Command + Shift + Space = mini AI window.
+    static func register(id: UInt32, key: Int, modifiers: Int, _ handler: @escaping () -> Void) {
+        if !installed {
+            installed = true
+            var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+            InstallEventHandler(GetApplicationEventTarget(), { _, event, _ in
+                var hotKey = EventHotKeyID()
+                GetEventParameter(event, EventParamName(kEventParamDirectObject), EventParamType(typeEventHotKeyID),
+                                  nil, MemoryLayout<EventHotKeyID>.size, nil, &hotKey)
+                let id = hotKey.id
+                DispatchQueue.main.async { HotKey.handlers[id]?() }
+                return noErr
+            }, 1, &spec, nil, nil)
+        }
+        handlers[id] = handler
+        var reference: EventHotKeyRef?
+        let hotKeyID = EventHotKeyID(signature: OSType(0x444B4844), id: id)
+        RegisterEventHotKey(UInt32(key), UInt32(modifiers), hotKeyID, GetApplicationEventTarget(), 0, &reference)
+        references.append(reference)
+    }
+}
+
+// MARK: - File drops
+
+enum FileDrop {
+    static func load(_ providers: [NSItemProvider], _ done: @escaping ([URL]) -> Void) {
+        let group = DispatchGroup()
+        let lock = NSLock()
+        var urls: [URL] = []
+        for provider in providers where provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) {
+            group.enter()
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+                var found: URL? = nil
+                if let data = item as? Data {
+                    found = URL(dataRepresentation: data, relativeTo: nil)
+                } else if let url = item as? URL {
+                    found = url
+                }
+                if let url = found {
+                    lock.lock()
+                    urls.append(url)
+                    lock.unlock()
+                }
+                group.leave()
+            }
+        }
+        group.notify(queue: .main) { done(urls) }
+    }
+}
+
+// MARK: - AppleScript
+
+/// Runs AppleScript in macOS's own `osascript` tool rather than inside Hangtime.
+/// In-app AppleScript must stay on the main thread (it crashed when used from a background
+/// queue), and on the main thread a slow app like Chrome would freeze the bar.
+enum AppleScript {
+    /// Returns the script's result as text, or nil if it failed. Call off the main thread.
+    @discardableResult
+    static func run(_ source: String) -> String? {
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        task.arguments = ["-e", source]
+        let output = Pipe()
+        task.standardOutput = output
+        task.standardError = FileHandle.nullDevice
+        do { try task.run() } catch { return nil }
+        let data = output.fileHandleForReading.readDataToEndOfFile()
+        task.waitUntilExit()
+        guard task.terminationStatus == 0 else { return nil }
+        return String(decoding: data, as: UTF8.self).trimmingCharacters(in: .newlines)
+    }
+}

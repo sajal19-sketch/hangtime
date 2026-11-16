@@ -1,0 +1,6 @@
+build.log
+debug.log
+*.app/
+.DS_Store
+promo/*.mp4
+promo/frames/
